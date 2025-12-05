@@ -26,7 +26,6 @@ A comprehensive NLP pipeline analyzing the evolution of language on Reddit. This
 5.  **Interactive Visualization**:
     - Dimensionality reduction via **UMAP**.
     - Density-based clustering via **HDBSCAN** to automatically find semantic topics.
-    - Generates interactive HTML plots using Plotly.
 
 ## Project Structure
 
