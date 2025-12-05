@@ -1,54 +1,99 @@
 import os
 import argparse
-from src import preprocessing, training, alignment, visualization, analysis, config
-from gensim.models import Word2Vec
+from src import preprocessing, training, distance_analysis, axis_analysis, visualization
 
 def main():
-    parser = argparse.ArgumentParser(description="Reddit Semantic Drift Analysis Pipeline")
-    parser.add_argument('--step', type=str, required=True, 
-                        choices=['preprocess', 'train', 'align', 'visualize'],
-                        help="Which step of the pipeline to run")
-    parser.add_argument('--subreddit', type=str, default='democrats',
-                        help="Subreddit to process")
+    parser = argparse.ArgumentParser(description="Reddit Semantic Shift Analysis Pipeline")
+    
+    # Main command selector
+    parser.add_argument('step', type=str, 
+                        choices=['preprocess', 'train', 'distance', 'axis', 'visualize'],
+                        help="The pipeline step to execute.")
+    
+    # Optional arguments
+    parser.add_argument('--subreddit', type=str, 
+                        help="Subreddit name (required for preprocess, optional for train)")
+    parser.add_argument('--file', type=str, 
+                        help="Input filename located in data/raw (required for preprocess)")
+    parser.add_argument('--model', type=str, 
+                        help="Model filename located in models/ (required for visualize)")
     
     args = parser.parse_args()
     
-    # Ensure directories exist
-    os.makedirs(config.MODELS_DIR, exist_ok=True)
-    os.makedirs(config.OUTPUT_DIR, exist_ok=True)
-
+    # --- Step 1: Preprocessing ---
     if args.step == 'preprocess':
-        print("--- Step 1: NLP Pipeline (spaCy) ---")
-        preprocessing.process_subreddit(args.subreddit)
+        if not args.subreddit or not args.file:
+            print("Error: 'preprocess' step requires --subreddit and --file arguments.")
+            print("Example: python main.py preprocess --subreddit democrats --file democrats_comments.zst")
+            return
         
-    elif args.step == 'train':
-        print("--- Step 2: Temporal Model Training ---")
-        phraser = training.train_phraser(args.subreddit)
-        training.train_temporal_models(args.subreddit, phraser)
+        # Construct output path dynamically
+        output_dir = os.path.join(preprocessing.DATA_PROCESSED_DIR, args.subreddit)
         
-    elif args.step == 'align':
-        print("--- Step 3: Orthogonal Procrustes Alignment ---")
-        # Example: Align 2016 model to 2024 model
-        path_old = os.path.join(config.MODELS_DIR, f"{args.subreddit}_Before_2016.model")
-        path_new = os.path.join(config.MODELS_DIR, f"{args.subreddit}_2021_2024.model")
+        print(f"--- Starting Preprocessing for r/{args.subreddit} ---")
+        print(f"Input File: {args.file}")
         
-        m_old = Word2Vec.load(path_old)
-        m_new = Word2Vec.load(path_new)
-        
-        m_base, m_aligned, vocab = alignment.intersection_align_gensim(m_new, m_old)
-        
-        # Save aligned model
-        m_aligned.save(os.path.join(config.MODELS_DIR, f"{args.subreddit}_Before_2016_ALIGNED.model"))
-        print("Alignment complete.")
+        preprocessing.process_and_save_comments(
+            filename=args.file,
+            subreddit=args.subreddit,
+            output_dir=output_dir,
+            without_stopwords=True
+        )
 
-    elif args.step == 'visualize':
-        print("--- Step 4: Visualization (UMAP + HDBSCAN) ---")
-        model_path = os.path.join(config.MODELS_DIR, f"{args.subreddit}_2021_2024.model")
-        model = Word2Vec.load(model_path)
+    # --- Step 2: Training ---
+    elif args.step == 'train':
+        print("--- Starting Model Training ---")
         
-        # Visualize top 2000 words
-        words = model.wv.index_to_key[:2000]
-        visualization.plot_embedding_cluster(model, words)
+        # Training Configuration
+        config = {
+            "vector_size": 300,
+            "window": 5,
+            "min_count": 10,
+            "epochs": 5,
+            "workers": 16,  # Adjust based on your CPU
+            "sg": 0,        # CBOW
+            "min_comments_to_train": 5000,
+            "chunk_size": 50000
+        }
+
+        # Determine scope
+        if args.subreddit:
+            subreddits = [args.subreddit]
+        else:
+            # Default list if none specified
+            subreddits = ["democrats", "republican", "conservative", "liberal"]
+        
+        # 1. Global Bigram Model (Always needed)
+        bigram_path = os.path.join(training.MODELS_DIR, "global_bigram.phr")
+        global_bigram_model = training.train_global_bigram_model(subreddits, bigram_path)
+
+        if not global_bigram_model:
+            print("Error: Could not train or load global bigram model.")
+            return
+
+        # 2. Train Word2Vec for each subreddit
+        for sub in subreddits:
+            training.build_models_for_subreddit(sub, global_bigram_model, config)
+
+    # --- Step 3: Distance Analysis (Polarization) ---
+    elif args.step == 'distance':
+        print("--- Starting Distance Analysis (Republican vs Democrat) ---")
+        distance_analysis.main()
+
+    # --- Step 4: Axis Analysis (Ideological Placement) ---
+    elif args.step == 'axis':
+        print("--- Starting Axis Analysis (Conservative <-> Liberal) ---")
+        axis_analysis.main()
+
+    # --- Step 5: Visualization ---
+    elif args.step == 'visualize':
+        if not args.model:
+            print("Error: 'visualize' step requires --model argument.")
+            print("Example: python main.py visualize --model democrats_2021_2024.model")
+            return
+            
+        print(f"--- Visualizing Model: {args.model} ---")
+        visualization.visualize_embedding(args.model)
 
 if __name__ == "__main__":
     main()

@@ -1,57 +1,48 @@
+import os
+import sys
+import re
+import html
+import unicodedata
 import pickle
 import datetime
-import re
-import html
-import unicodedata
+import spacy
 from tqdm import tqdm
 import numpy as np
-from tqdm import tqdm
-import random
-import sys
-import os
-sys.path.append(os.path.abspath('..\\..'))  # Adjust path if needed based on your execution context
-from file_streams import getFileJsonStream
-import spacy
-import re
-import html
-import unicodedata
 
+# Attempt to import file_streams depending on how the script is run
+try:
+    from src.file_streams import getFileJsonStream
+except ImportError:
+    # Fallback if running directly inside src folder
+    from file_streams import getFileJsonStream
 
-# Initialize global resources once
-STOP_WORDS = set(stopwords.words('english'))
-LEMMATIZER = WordNetLemmatizer()
+# --- Configuration ---
+DATA_RAW_DIR = '../data/raw'
+DATA_PROCESSED_DIR = '../data/preprocessed'
 
-# POS tag cache to avoid redundant tagging
-POS_CACHE = {}
-# Lemma cache to avoid redundant lemmatization
-LEMMA_CACHE = {}
+# Ensure base output directory exists
+os.makedirs(DATA_PROCESSED_DIR, exist_ok=True)
 
-def get_wordnet_pos(tag):
-    """Convert NLTK POS tag to WordNet POS tag"""
-    if tag.startswith('J'):
-        return 'a'  # adjective
-    elif tag.startswith('V'):
-        return 'v'  # verb
-    elif tag.startswith('N'):
-        return 'n'  # noun
-    elif tag.startswith('R'):
-        return 'r'  # adverb
-    else:
-        return 'n'  # default as noun
-
-
-def preprocess_text_spacy(text, without_stopwords=True):
-    """
-    Preprocess Reddit text content using spaCy.
-    """
+def load_spacy_model():
+    """Safely load the spacy model."""
     try:
-        nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+        return spacy.load("en_core_web_sm", disable=["parser", "ner"])
     except OSError:
-        print("Error: spaCy model not found. Run: python -m spacy download en_core_web_sm")
-        raise
+        print("Error: spaCy model 'en_core_web_sm' not found.")
+        print("Please run: python -m spacy download en_core_web_sm")
+        sys.exit(1)
+
+# Initialize global resources
+nlp = load_spacy_model()
+
+def preprocess_text(text, without_stopwords=True):
+    """
+    Preprocess text content: cleaning, removing artifacts, and lemmatizing.
+    """
     # --- Step 1: Text Cleaning (Regex) ---
-    # Keep your original cleaning logic; it's faster to do this with regex 
-    # before passing it to spaCy.
+    if not text or not isinstance(text, str):
+        return []
+
     text = html.unescape(text)
     text = unicodedata.normalize('NFKD', text)
     
@@ -66,140 +57,146 @@ def preprocess_text_spacy(text, without_stopwords=True):
     text = re.sub(r'/u/\w+', '', text)
     text = re.sub(r'u/\w+', '', text)
     
-    # Basic text cleaning
+    # Basic text cleaning (keep only letters and spaces)
     text = re.sub("[^A-Za-z]+", ' ', text).lower()
     
     # --- Step 2: NLP Processing with spaCy ---
-    
-    # nlp(text) tokenizes, tags, and lemmatizes the text
     doc = nlp(text)
     
     processed_words = []
     
     for token in doc:
-        # Skip whitespace (though regex mostly handled this)
+        # Skip whitespace
         if token.is_space:
             continue
             
-        # Stopword check using spaCy's built-in list
+        # Stopword check
         if without_stopwords and token.is_stop:
             continue
             
         # Get the lemma
         lemma = token.lemma_
         
-        # Length check (from your original requirements)
+        # Length check
         if 2 < len(lemma) <= 15:
             processed_words.append(lemma)
 
     return processed_words
 
 
-def process_and_save_comments(path, subreddit, output_dir, without_stopwords=True, batch_size=1000000):
-    """Process comments and save in batches"""
-    print(f"Processing file: {path}")
+def process_and_save_comments(filename, subreddit, output_dir, without_stopwords=True, batch_size=100000):
+    """Process comments and save in batches (chunks)."""
+    
+    input_path = os.path.join(DATA_RAW_DIR, filename)
+    
+    if not os.path.exists(input_path):
+        print(f"File not found: {input_path}")
+        return
+
+    print(f"Processing file: {input_path}")
     
     # Batch processing counters
     batch_count = 0
     batch_number = 1
     total_count = 0
     
-    # Create data structure for comments
     comments_batch = []
 
-    with open(path, "rb") as f:
-        jsonStream = getFileJsonStream(path, f)
-        if jsonStream is None:
-            print(f"Unable to read file {path}")
-            return
-        
-        for row in tqdm(jsonStream, desc=f"Processing {subreddit} comments"):
-            if "body" not in row or "created_utc" not in row or "author" not in row or "id" not in row:
-                continue
-                
-            author = row["author"]
-            if author in {"AutoModerator", "election_info_bot"}:
-                continue
-            
-            comment_id = row["id"]
-            text = row["body"]
-            created_timestamp = row["created_utc"]
-            date = datetime.datetime.fromtimestamp(int(created_timestamp))
-            
-            # Process text with optimized functions
-            processed_words = preprocess_text(text, lemmatize=True, without_stopwords=without_stopwords)
-            
-            if processed_words:
-                # Save processed comment with metadata
-                comment_data = {
-                    "comment_id": comment_id,
-                    "author": author,
-                    "date": date.strftime("%Y-%m-%d"),
-                    "timestamp": created_timestamp,
-                    "processed_text": processed_words,  # Original order preserved
-                    "original": text
-                }
-                
-                comments_batch.append(comment_data)
-                batch_count += 1
-                
-            # Check if we need to save the current batch
-            if batch_count >= batch_size:
-                print(f"\nReached {batch_size} comments, saving batch {batch_number}...")
-                
-                # Save batch directly without filtering
-                save_path = f"{output_dir}/{subreddit}_batch{batch_number}.pkl"
-                with open(save_path, "wb") as out_file:
-                    pickle.dump(comments_batch, out_file)
-                
-                print(f"Saved {len(comments_batch)} comments to {save_path}")
-                
-                # Reset batch data
-                comments_batch = []
-                batch_count = 0
-                batch_number += 1
-                total_count += batch_size
-    
-    # Process any remaining comments
-    if batch_count > 0:
-        print(f"\nSaving remaining {batch_count} comments...")
-        
-        # Save batch
-        save_path = f"{output_dir}/{subreddit}_batch{batch_number}.pkl"
-        with open(save_path, "wb") as out_file:
-            pickle.dump(comments_batch, out_file)
-        
-        print(f"Saved {len(comments_batch)} comments to {save_path}")
-        total_count += batch_count
-    
-    print(f"\nCompleted processing {subreddit} comments!")
-    print(f"Total comments saved: {total_count}")
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
 
+    try:
+        with open(input_path, "rb") as f:
+            jsonStream = getFileJsonStream(input_path, f)
+            if jsonStream is None:
+                print(f"Unable to read file stream for {input_path}")
+                return
+            
+            for row in tqdm(jsonStream, desc=f"Processing {subreddit}"):
+                # Validate row data
+                if not all(key in row for key in ["body", "created_utc", "author", "id"]):
+                    continue
+                    
+                author = row["author"]
+                if author in {"AutoModerator", "election_info_bot"}:
+                    continue
+                
+                # Extract Data
+                comment_id = row["id"]
+                text = row["body"]
+                created_timestamp = row["created_utc"]
+                try:
+                    date = datetime.datetime.fromtimestamp(int(created_timestamp))
+                except (ValueError, TypeError):
+                    continue
+                
+                # Process Text
+                processed_words = preprocess_text(text, without_stopwords=without_stopwords)
+                
+                if processed_words:
+                    comment_data = {
+                        "comment_id": comment_id,
+                        "author": author,
+                        "date": date.strftime("%Y-%m-%d"),
+                        "timestamp": created_timestamp,
+                        "processed_text": processed_words,
+                        "original": text
+                    }
+                    
+                    comments_batch.append(comment_data)
+                    batch_count += 1
+                    
+                # Save Batch if limit reached
+                if batch_count >= batch_size:
+                    save_batch(comments_batch, output_dir, subreddit, batch_number)
+                    
+                    # Reset batch data
+                    comments_batch = []
+                    batch_count = 0
+                    batch_number += 1
+                    total_count += batch_size
+        
+        # Process any remaining comments
+        if batch_count > 0:
+            save_batch(comments_batch, output_dir, subreddit, batch_number)
+            total_count += batch_count
+        
+        print(f"\nCompleted {subreddit}! Total saved: {total_count}")
+
+    except Exception as e:
+        print(f"An error occurred processing {filename}: {e}")
+
+def save_batch(data, output_dir, subreddit, batch_number):
+    """Helper function to save a batch of data."""
+    save_path = os.path.join(output_dir, f"{subreddit}_batch{batch_number}.pkl")
+    print(f"\nSaving batch {batch_number} to {save_path}...")
+    with open(save_path, "wb") as out_file:
+        pickle.dump(data, out_file)
+    print(f"Saved {len(data)} comments.")
 
 def main():
-    """Main function"""
-    random.seed(23)
-    np.random.seed(23)
-    
-    # Define data file paths
+    """Main execution function."""
+    # Map your specific filenames here
+    # These filenames must exist in ../data/raw
     files = {
-        "democrats": r"datasets/democrats_comments.zst",
-        "republican": r"datasets/Republican_comments.zst",
-        "conservative": r"datasets/Conservative_comments.zst",
-        "liberal": r"datasets/Liberal_comments.zst"
+        "democrats": "democrats_comments.zst",
+        "republican": "Republican_comments.zst"
     }
     
-    # List of subreddits to process (process all by default)
-    subreddits_to_process = list(files.keys())
+    # Ensure base output directory exists
+    os.makedirs(DATA_PROCESSED_DIR, exist_ok=True)
 
-    for subreddit in subreddits_to_process:
-        output_dir = f"processed_comments_2/{subreddit}"
-        os.makedirs(output_dir, exist_ok=True)
-        print(f"\nProcessing subreddit: {subreddit}")
+    for subreddit, filename in files.items():
+        subreddit_output_dir = os.path.join(DATA_PROCESSED_DIR, subreddit)
+        
+        print(f"\n--- Starting {subreddit} ---")
         process_and_save_comments(
-            files[subreddit],
-            subreddit,
-            output_dir,
-            without_stopwords=False,
-            batch_size=1000000
+            filename=filename,
+            subreddit=subreddit,
+            output_dir=subreddit_output_dir,
+            without_stopwords=True,
+            batch_size=100000 # Adjusted to a safer default for memory
         )
+
+if __name__ == "__main__":
+    main()
