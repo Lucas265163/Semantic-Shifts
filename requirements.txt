@@ -1,0 +1,13 @@
+numpy
+pandas
+gensim
+spacy
+scipy
+matplotlib
+seaborn
+umap-learn
+hdbscan
+tqdm
+zstandard
+orjson
+argparse
