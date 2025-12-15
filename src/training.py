@@ -7,7 +7,7 @@ import numpy as np
 from gensim.models.phrases import Phrases, Phraser
 from gensim.models import Word2Vec
 
-# --- Configuration ---
+# Configuration 
 DATA_PROCESSED_DIR = '/data/preprocessed'
 MODELS_DIR = '../models'
 INTERIM_MODELS_DIR = os.path.join(MODELS_DIR, 'interim')
@@ -221,7 +221,7 @@ def main():
         "chunk_size": 50000  # Process 50k comments at a time to save RAM
     }
 
-    # 1. Train Global Bigram Model
+    # Train Global Bigram Model
     bigram_model_path = os.path.join(MODELS_DIR, "global_bigram.phr")
     global_bigram_model = train_global_bigram_model(
         subreddits, 
@@ -232,7 +232,7 @@ def main():
         print("Failed to initialize bigram model. Exiting.")
         return
 
-    # 2. Train Word2Vec Models per Subreddit
+    # Train Word2Vec Models per Subreddit
     for subreddit in subreddits:
         build_models_for_subreddit(subreddit, global_bigram_model, training_config)
 

@@ -6,7 +6,7 @@ import seaborn as sns
 import pandas as pd
 from gensim.models import Word2Vec
 
-# --- Configuration ---
+# Configuration 
 MODELS_DIR = '../models'
 OUTPUT_DIR = '../plots'
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -49,12 +49,12 @@ def get_processed_vectors(model, words, center=True):
     return vecs / norm
 
 def align_and_measure(path_rep, path_dem):
-    # 1. Load
+    # Load
     print(f"Processing {path_rep}...")
     model_rep = gensim.models.Word2Vec.load(path_rep)
     model_dem = gensim.models.Word2Vec.load(path_dem)
 
-    # 2. Rough Alignment
+    # Rough Alignment
     # Filter to top 60% by frequency in each model
     rep_vocab_sorted = sorted(model_rep.wv.index_to_key, key=lambda w: model_rep.wv.get_vecattr(w, "count"), reverse=True)
     dem_vocab_sorted = sorted(model_dem.wv.index_to_key, key=lambda w: model_dem.wv.get_vecattr(w, "count"), reverse=True)
@@ -73,7 +73,7 @@ def align_and_measure(path_rep, path_dem):
     # Anchors
     initial_anchors = common_vocab[:3000]
     
-    # 3. First Rotation
+    # First Rotation
     vecs_rep_rough = get_processed_vectors(model_rep, initial_anchors, center=True)
     vecs_dem_rough = get_processed_vectors(model_dem, initial_anchors, center=True)
     
@@ -82,13 +82,13 @@ def align_and_measure(path_rep, path_dem):
     rotation_1 = u @ vt
     vecs_dem_rotated = vecs_dem_rough @ rotation_1
     
-    # 4. Filter Anchors
+    # Filter Anchors
     similarities = np.sum(vecs_rep_rough * vecs_dem_rotated, axis=1)
     distances = 1 - similarities
     anchor_scores = sorted(zip(initial_anchors, distances), key=lambda x: x[1])
     refined_anchors = [w for w, d in anchor_scores[:1500]]
     
-    # 5. Final Alignment
+    # Final Alignment
     vecs_rep_final = get_processed_vectors(model_rep, refined_anchors, center=True)
     vecs_dem_final = get_processed_vectors(model_dem, refined_anchors, center=True)
     
@@ -106,7 +106,7 @@ def align_and_measure(path_rep, path_dem):
     if hasattr(model_dem.wv, 'fill_norms'):
         model_dem.wv.fill_norms(force=True)
     
-    # 6. Measure Distances
+    # Measure Distances
     # Take top 80% by frequency to avoid noise in plotting
     num_anchors = int(0.8 * len(common_vocab))
     analysis_vocab = common_vocab[:num_anchors]
@@ -125,7 +125,7 @@ def plot_results(results):
     
     axes_flat = axes.flatten()
     
-    # 1. Individual Period Plots
+    # Individual Period Plots
     for i, period in enumerate(PERIODS):
         if period["name"] not in results:
             continue
@@ -146,7 +146,7 @@ def plot_results(results):
         ax.legend()
         ax.grid(True, alpha=0.3)
 
-    # 2. Overlay Plot
+    # Overlay Plot
     ax_final = axes_flat[3]
     for period in PERIODS:
         if period["name"] in results:

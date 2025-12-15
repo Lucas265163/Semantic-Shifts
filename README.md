@@ -1,6 +1,6 @@
 # Semantic Drift & Community Divergence in Political Subreddits
 
-> 🚧 **Work in Progress**: This project is currently under active development. New features and analysis modules are being added regularly.
+> **Work in Progress**: This project is currently under active development. New features and analysis modules are being added regularly.
 > _Draft Reference: [Different-Word-Usage-on-Different-Subreddits](https://github.com/Lucas265163/Different-Word-Usage-on-Different-Subreddits/tree/main)_
 
 A comprehensive NLP pipeline analyzing the evolution of language on Reddit. This project quantifies how political polarization manifests in semantic shifts using temporal word embeddings.

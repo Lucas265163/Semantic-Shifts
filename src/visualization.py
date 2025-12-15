@@ -8,7 +8,7 @@ import plotly.express as px
 import plotly.io as pio
 from gensim.models import Word2Vec
 
-# --- Configuration ---
+# Configuration 
 MODELS_DIR = '../models'
 OUTPUT_DIR = '../plots'
 
@@ -108,18 +108,18 @@ def visualize_embedding(model_name, min_count=100):
     if not model:
         return
 
-    # 1. Prepare Data
+    # Prepare Data
     words, vectors, freqs = get_word_data(model, min_count=min_count)
     
-    # 2. UMAP Reduction (High dim -> 2D)
+    # UMAP Reduction (High dim -> 2D)
     # Note: We cluster on the UMAP projection for cleaner visual clusters,
     # though clustering on raw vectors is also valid (but often messier visually).
     umap_embedding = reduce_dimensions_umap(vectors)
     
-    # 3. HDBSCAN Clustering
+    # HDBSCAN Clustering
     cluster_labels = cluster_vectors_hdbscan(umap_embedding)
     
-    # 4. Build DataFrame
+    # Build DataFrame
     df = pd.DataFrame({
         'word': words,
         'x': umap_embedding[:, 0],
@@ -129,10 +129,10 @@ def visualize_embedding(model_name, min_count=100):
         'log_freq': np.log1p(freqs)
     })
     
-    # 5. Analyze Clusters
+    # Analyze Clusters
     cluster_info = analyze_clusters(df)
     
-    # 6. Interactive Plot using Plotly
+    # Interactive Plot using Plotly
     # Points treated as noise by HDBSCAN are labeled -1
     df['cluster_name'] = df['cluster'].astype(str)
     df.loc[df['cluster'] == -1, 'cluster_name'] = 'Noise'

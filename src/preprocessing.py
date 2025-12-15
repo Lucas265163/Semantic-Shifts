@@ -16,7 +16,7 @@ except ImportError:
     # Fallback if running directly inside src folder
     from file_streams import getFileJsonStream
 
-# --- Configuration ---
+# Configuration 
 DATA_RAW_DIR = '../data/raw'
 DATA_PROCESSED_DIR = '../data/preprocessed'
 
