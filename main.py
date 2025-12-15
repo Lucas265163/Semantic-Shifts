@@ -20,7 +20,7 @@ def main():
     
     args = parser.parse_args()
     
-    # --- Step 1: Preprocessing ---
+    # Preprocessing
     if args.step == 'preprocess':
         if not args.subreddit or not args.file:
             print("Error: 'preprocess' step requires --subreddit and --file arguments.")
@@ -40,7 +40,7 @@ def main():
             without_stopwords=True
         )
 
-    # --- Step 2: Training ---
+    # Training 
     elif args.step == 'train':
         print("--- Starting Model Training ---")
         
@@ -63,7 +63,7 @@ def main():
             # Default list if none specified
             subreddits = ["democrats", "republican", "conservative", "liberal"]
         
-        # 1. Global Bigram Model (Always needed)
+        # Global Bigram Model
         bigram_path = os.path.join(training.MODELS_DIR, "global_bigram.phr")
         global_bigram_model = training.train_global_bigram_model(subreddits, bigram_path)
 
@@ -71,21 +71,21 @@ def main():
             print("Error: Could not train or load global bigram model.")
             return
 
-        # 2. Train Word2Vec for each subreddit
+        # Train Word2Vec for each subreddit
         for sub in subreddits:
             training.build_models_for_subreddit(sub, global_bigram_model, config)
 
-    # --- Step 3: Distance Analysis (Polarization) ---
+    # Distance Analysis (Polarization)
     elif args.step == 'distance':
         print("--- Starting Distance Analysis (Republican vs Democrat) ---")
         distance_analysis.main()
 
-    # --- Step 4: Axis Analysis (Ideological Placement) ---
+    # Axis Analysis (Ideological Placement)
     elif args.step == 'axis':
         print("--- Starting Axis Analysis (Conservative <-> Liberal) ---")
         axis_analysis.main()
 
-    # --- Step 5: Visualization ---
+    # Visualization
     elif args.step == 'visualize':
         if not args.model:
             print("Error: 'visualize' step requires --model argument.")
